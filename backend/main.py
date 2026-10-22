@@ -33,6 +33,15 @@ else:
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "service": "FindrAI Multi-Modal API",
+        "docs": "/docs",
+        "health": "/api/health"
+    }
+
 # Include API routes
 app.include_router(router)
 
