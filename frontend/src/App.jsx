@@ -23,7 +23,9 @@ const getApiBase = () => currentApiBase || (typeof window !== 'undefined' && win
 
 const getImageUrl = (url) => {
   if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+    return url;
+  }
   const base = getApiBase() || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') ? DEFAULT_BACKEND_URL : '');
   const cleanUrl = url.startsWith('/') ? url : `/${url}`;
   return base ? `${base}${cleanUrl}` : cleanUrl;
