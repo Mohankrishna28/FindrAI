@@ -1,0 +1,218 @@
+:root {
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Google-inspired Light Theme with Modern Light-Blue Textures */
+  --bg-page: #f8fafd;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #ffffff;
+  --border-light: #e2e8f0;
+  --border-blue-subtle: #dbeafe;
+  --border-blue-focus: #3b82f6;
+
+  /* Google Signature Colors */
+  --google-blue: #1a73e8;
+  --google-blue-hover: #1557b0;
+  --google-blue-surface: #e8f0fe;
+  --google-red: #ea4335;
+  --google-yellow: #f9ab00;
+  --google-green: #34a853;
+
+  /* Soft Ambient Glows */
+  --blue-glow: rgba(37, 99, 235, 0.12);
+  --cyan-glow: rgba(6, 182, 212, 0.12);
+  --emerald-glow: rgba(16, 185, 129, 0.12);
+  --rose-glow: rgba(244, 63, 94, 0.12);
+  --amber-glow: rgba(245, 158, 11, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-page);
+  color: #1e293b;
+  min-height: 100vh;
+  overflow-x: hidden;
+  /* Modern UI Texture: Soft light-bluish ambient glow + delicate micro-grid */
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.75) 0px, transparent 45%),
+    radial-gradient(at 100% 0%, rgba(224, 242, 254, 0.7) 0px, transparent 40%),
+    radial-gradient(at 50% 90%, rgba(238, 242, 255, 0.6) 0px, transparent 55%),
+    linear-gradient(to right, rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(37, 99, 235, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.025em;
+  color: #0f172a;
+}
+
+/* Google-Style Modern Panels & Cards */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 20px;
+  box-shadow: 
+    0 1px 3px 0 rgba(60, 64, 67, 0.06), 
+    0 6px 16px -2px rgba(60, 64, 67, 0.04);
+}
+
+.glass-panel:hover {
+  border-color: #cbd5e1;
+}
+
+.glass-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.08), 0 4px 10px -2px rgba(60, 64, 67, 0.04);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+  box-shadow: 
+    0 12px 28px -6px rgba(37, 99, 235, 0.12),
+    0 4px 10px -2px rgba(60, 64, 67, 0.06);
+}
+
+.glass-pill {
+  background: rgba(241, 245, 249, 0.8);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+/* Radar Sweep Animation for AI Matching */
+@keyframes radarSweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep-beam {
+  animation: radarSweep 4s linear infinite;
+  transform-origin: center center;
+}
+
+@keyframes radarPing {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.radar-ping-ring {
+  animation: radarPing 3s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+/* Glowing Animations */
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(37, 99, 235, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(37, 99, 235, 0.3);
+  }
+}
+
+.glow-pulse {
+  animation: glowPulse 2.8s infinite;
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.float-slow {
+  animation: floatSlow 4s ease-in-out infinite;
+}
+
+/* Gradient Texts tailored for Clean White Background */
+.text-gradient-hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e40af 50%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-cyan {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-emerald {
+  background: linear-gradient(135deg, #059669 0%, #047857 50%, #0f766e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom Scrollbar - Google Light Styling */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Shimmer Button */
+.shimmer-btn {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    60deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.25) 50%,
+    transparent 70%
+  );
+  transform: rotate(30deg);
+  animation: shimmerMove 3.5s infinite;
+}
+
+@keyframes shimmerMove {
+  0% { transform: translateX(-100%) rotate(30deg); }
+  100% { transform: translateX(100%) rotate(30deg); }
+}
