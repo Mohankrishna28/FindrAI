@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://findr-ai-zh93.vercel.app/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://findr-ai-zh93.vercel.app/uploads/:path*"
+    }
+  ]
+}

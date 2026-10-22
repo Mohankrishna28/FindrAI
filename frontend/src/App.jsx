@@ -11,19 +11,22 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+const DEFAULT_BACKEND_URL = 'https://findr-ai-zh93.vercel.app';
+
 let currentApiBase = '';
 if (typeof window !== 'undefined') {
-  currentApiBase = localStorage.getItem('FINDR_API_BASE') || import.meta.env.VITE_API_BASE_URL || '';
+  currentApiBase = localStorage.getItem('FINDR_API_BASE') || import.meta.env.VITE_API_BASE_URL || (window.location.hostname.includes('vercel.app') ? DEFAULT_BACKEND_URL : '');
   currentApiBase = currentApiBase.trim().replace(/\/+$/, '');
 }
 
-const getApiBase = () => currentApiBase;
+const getApiBase = () => currentApiBase || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') ? DEFAULT_BACKEND_URL : '');
 
 const getImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  const base = getApiBase();
-  return `${base}${url}`;
+  const base = getApiBase() || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') ? DEFAULT_BACKEND_URL : '');
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return base ? `${base}${cleanUrl}` : cleanUrl;
 };
 
 // Circular Gauge Component for Match Confidence - Google Styled
@@ -1005,6 +1008,11 @@ export default function App() {
                               src={getImageUrl(item.image_url)} 
                               alt={item.title} 
                               className="w-full h-full object-cover transition duration-300 hover:scale-105" 
+                              onError={(e) => {
+                                if (!e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
+                                  e.currentTarget.src = `https://findr-ai-zh93.vercel.app${item.image_url.startsWith('/') ? '' : '/'}${item.image_url}`;
+                                }
+                              }}
                             />
                           ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50/50 text-slate-400">
@@ -1107,7 +1115,16 @@ export default function App() {
                         <div className="flex items-center gap-3">
                           <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
                             {item.image_url ? (
-                              <img src={getImageUrl(item.image_url)} alt={item.title} className="w-full h-full object-cover" />
+                              <img 
+                                src={getImageUrl(item.image_url)} 
+                                alt={item.title} 
+                                className="w-full h-full object-cover" 
+                                onError={(e) => {
+                                  if (!e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
+                                    e.currentTarget.src = `https://findr-ai-zh93.vercel.app${item.image_url.startsWith('/') ? '' : '/'}${item.image_url}`;
+                                  }
+                                }}
+                              />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-slate-400">
                                 <Camera className="w-5 h-5" />
@@ -1376,7 +1393,16 @@ export default function App() {
                         <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-100 flex items-start gap-3">
                           <div className="w-14 h-14 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-rose-200">
                             {lost.image_url ? (
-                              <img src={getImageUrl(lost.image_url)} alt={lost.title} className="w-full h-full object-cover" />
+                              <img 
+                                src={getImageUrl(lost.image_url)} 
+                                alt={lost.title} 
+                                className="w-full h-full object-cover" 
+                                onError={(e) => {
+                                  if (lost.image_url && !e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
+                                    e.currentTarget.src = `https://findr-ai-zh93.vercel.app${lost.image_url.startsWith('/') ? '' : '/'}${lost.image_url}`;
+                                  }
+                                }}
+                              />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-rose-300">
                                 <Camera className="w-6 h-6" />
@@ -1401,7 +1427,16 @@ export default function App() {
                         <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 flex items-start gap-3">
                           <div className="w-14 h-14 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-blue-200">
                             {found.image_url ? (
-                              <img src={getImageUrl(found.image_url)} alt={found.title} className="w-full h-full object-cover" />
+                              <img 
+                                src={getImageUrl(found.image_url)} 
+                                alt={found.title} 
+                                className="w-full h-full object-cover" 
+                                onError={(e) => {
+                                  if (found.image_url && !e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
+                                    e.currentTarget.src = `https://findr-ai-zh93.vercel.app${found.image_url.startsWith('/') ? '' : '/'}${found.image_url}`;
+                                  }
+                                }}
+                              />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-blue-300">
                                 <Camera className="w-6 h-6" />
