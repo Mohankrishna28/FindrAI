@@ -1,8 +1,11 @@
 import os
 import shutil
 import uuid
+import io
+import base64
 from datetime import datetime, date
 from typing import Optional, List
+from PIL import Image
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
@@ -50,19 +53,34 @@ async def report_item(
     except Exception:
         parsed_date = date.today()
 
-    # Handle image upload if provided
+    # Handle image upload if provided with permanent Base64 persistence
     image_rel_path = None
     image_emb = None
     if image and image.filename:
-        ext = os.path.splitext(image.filename)[1].lower() or ".jpg"
-        filename = f"{uuid.uuid4().hex}{ext}"
-        save_path = os.path.join(UPLOAD_DIR, filename)
+        file_bytes = await image.read()
+        if file_bytes:
+            ext = os.path.splitext(image.filename)[1].lower() or ".jpg"
+            filename = f"{uuid.uuid4().hex}{ext}"
+            save_path = os.path.join(UPLOAD_DIR, filename)
 
-        with open(save_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+            with open(save_path, "wb") as buffer:
+                buffer.write(file_bytes)
 
-        image_rel_path = f"/uploads/{filename}"
-        image_emb = get_image_embedding(save_path)
+            image_emb = get_image_embedding(save_path)
+
+            # Convert to compressed web-optimized Base64 data URI
+            try:
+                img = Image.open(io.BytesIO(file_bytes))
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.thumbnail((700, 700), Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=82, optimize=True)
+                b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+                image_rel_path = f"data:image/jpeg;base64,{b64_str}"
+            except Exception as e:
+                print(f"Base64 image conversion error: {e}")
+                image_rel_path = f"/uploads/{filename}"
 
     # Compute semantic text embedding from rich composite description
     text_content = f"{title}. Category: {category}. Brand: {brand or 'unspecified'}. Color: {color}. Location: {location}. Details: {description}"
@@ -155,6 +173,18 @@ def get_item(item_id: int, db: Session = Depends(get_db)):
         "item": item.to_dict(),
         "matches": [m.to_dict() for m in matches]
     }
+
+
+@router.delete("/items/{item_id}")
+def delete_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(ItemReport).filter(ItemReport.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    db.query(MatchResult).filter(or_(MatchResult.lost_item_id == item_id, MatchResult.found_item_id == item_id)).delete()
+    db.query(ClaimRequest).filter(ClaimRequest.item_id == item_id).delete()
+    db.delete(item)
+    db.commit()
+    return {"success": True, "deleted_id": item_id}
 
 
 @router.patch("/items/{item_id}/status")

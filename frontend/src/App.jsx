@@ -7,7 +7,7 @@ import {
   Cpu, Activity, Zap, Compass, Building2, HelpCircle, FileText,
   Clock, Share2, CheckSquare, Flame, BarChart3, LayoutGrid, List,
   Smartphone, Laptop, BookOpen, Key, Shirt, Glasses, CheckCheck,
-  Server, Link2
+  Server, Link2, Trash2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -281,6 +281,23 @@ export default function App() {
   const [apiModalOpen, setApiModalOpen] = useState(false);
   const [apiTesting, setApiTesting] = useState(false);
   const [apiConnected, setApiConnected] = useState(null);
+  const [imgFailed, setImgFailed] = useState({});
+
+  const handleDeleteItem = async (itemId, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm('Delete this article record?')) return;
+    try {
+      const res = await fetch(`${getApiBase()}/api/items/${itemId}`, { method: 'DELETE' });
+      if (res.ok) {
+        showNotification('Item Removed', 'The article report has been removed.');
+        fetchItems();
+        fetchStats();
+        fetchMatches();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleSaveApiUrl = async (newUrl) => {
     const cleanUrl = (newUrl || '').trim().replace(/\/+$/, '');
@@ -1002,22 +1019,20 @@ export default function App() {
                     >
                       <div>
                         {/* Image Preview Container */}
-                        <div className="relative h-44 bg-slate-100 overflow-hidden border-b border-slate-100">
-                          {item.image_url ? (
+                        <div className="relative h-44 bg-slate-100 overflow-hidden border-b border-slate-100 flex items-center justify-center">
+                          {item.image_url && !imgFailed[item.id] ? (
                             <img 
                               src={getImageUrl(item.image_url)} 
                               alt={item.title} 
                               className="w-full h-full object-cover transition duration-300 hover:scale-105" 
-                              onError={(e) => {
-                                if (!e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
-                                  e.currentTarget.src = `https://findr-ai-zh93.vercel.app${item.image_url.startsWith('/') ? '' : '/'}${item.image_url}`;
-                                }
-                              }}
+                              onError={() => setImgFailed(prev => ({ ...prev, [item.id]: true }))}
                             />
                           ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50/50 text-slate-400">
                               <Camera className="w-8 h-8 mb-1 text-slate-300" />
-                              <span className="text-[11px] font-medium text-slate-400">No Photo Uploaded</span>
+                              <span className="text-[11px] font-medium text-slate-400">
+                                {item.image_url ? 'Photo Expired' : 'No Photo Uploaded'}
+                              </span>
                             </div>
                           )}
 
@@ -1032,8 +1047,8 @@ export default function App() {
                             </span>
                           </div>
 
-                          {/* Status Pill */}
-                          <div className="absolute top-3 right-3">
+                          {/* Status Pill & Delete Button */}
+                          <div className="absolute top-3 right-3 flex items-center gap-1.5">
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                               item.status === 'RESOLVED' 
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
@@ -1043,6 +1058,13 @@ export default function App() {
                             } shadow-sm backdrop-blur-md`}>
                               {item.status}
                             </span>
+                            <button
+                              onClick={(e) => handleDeleteItem(item.id, e)}
+                              className="p-1 rounded-full bg-white/90 hover:bg-rose-50 hover:text-rose-600 text-slate-400 border border-slate-200 shadow-sm transition"
+                              title="Delete this article record"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
                           </div>
                         </div>
 
