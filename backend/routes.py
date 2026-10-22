@@ -320,10 +320,12 @@ def recompute_all_matches(db: Session = Depends(get_db)):
     return {"success": True, "recomputed_pairs": total_generated}
 
 
-@router.post("/seed")
-def seed_benchmark_data():
-    """Resets and seeds the 5 Lost and 5 Found matching benchmark data."""
-    from backend.seed_data import seed_database
-    seed_database()
-    return {"success": True, "message": "Database seeded with 10 benchmark items"}
+@router.post("/clear")
+def clear_all_records(db: Session = Depends(get_db)):
+    """Deletes all items, matches, and claims for a clean real-time database state."""
+    db.query(ClaimRequest).delete()
+    db.query(MatchResult).delete()
+    db.query(ItemReport).delete()
+    db.commit()
+    return {"success": True, "message": "All database records purged"}
 

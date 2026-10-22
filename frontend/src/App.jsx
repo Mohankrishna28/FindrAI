@@ -98,8 +98,7 @@ const TAXONOMY_CATEGORIES = [
       'Device unlock PIN / Biometric authentication'
     ],
     verificationProof: 'Claimant unlocks device in front of Campus Security or provides original invoice/box IMEI match.',
-    multiModalFocus: 'NLP Semantic (35%) + Attribute Specs (20%) + High-resolution visual matching',
-    sampleItems: ['Dell XPS 13 Laptop', 'Apple iPhone 14', 'Casio fx-991EX Calculator', 'Anker PowerBank']
+    multiModalFocus: 'NLP Semantic (35%) + Attribute Specs (20%) + High-resolution visual matching'
   },
   {
     id: 'ID Cards',
@@ -114,8 +113,7 @@ const TAXONOMY_CATEGORIES = [
       'Wallet material, color, and internal card inventory'
     ],
     verificationProof: 'Instant cross-validation against University Registrar ERP database and active student portal login.',
-    multiModalFocus: 'Attribute text extraction + Student database cross-check (Instant high confidence)',
-    sampleItems: ['Campus Student ID Card', 'Brown Leather Bi-fold Wallet', 'State Bank Debit Card']
+    multiModalFocus: 'Attribute text extraction + Student database cross-check (Instant high confidence)'
   },
   {
     id: 'Books',
@@ -130,8 +128,7 @@ const TAXONOMY_CATEGORIES = [
       'Subject code, branch, and semester notation'
     ],
     verificationProof: 'Verification of handwritten signatures or specific notes on stated page numbers.',
-    multiModalFocus: 'Title NLP Semantic proximity (45%) + Handwritten signature identification',
-    sampleItems: ['Database System Concepts (Silberschatz)', 'Data Structures in C++', 'Physics Lab Manual']
+    multiModalFocus: 'Title NLP Semantic proximity (45%) + Handwritten signature identification'
   },
   {
     id: 'Audio',
@@ -146,8 +143,7 @@ const TAXONOMY_CATEGORIES = [
       'Left/Right bud model code and battery indicator color'
     ],
     verificationProof: 'Successful live Bluetooth pairing with the student’s authenticated phone.',
-    multiModalFocus: 'Brand & Color ontology match (35%) + Vision feature match for case stickers',
-    sampleItems: ['Apple AirPods Pro (2nd Gen)', 'Sony WH-1000XM4 Headphones', 'boAt Rockerz Earbuds']
+    multiModalFocus: 'Brand & Color ontology match (35%) + Vision feature match for case stickers'
   },
   {
     id: 'Personal',
@@ -162,8 +158,7 @@ const TAXONOMY_CATEGORIES = [
       'Prescription optical power for eyewear'
     ],
     verificationProof: 'Precise description of stickers, scratches, or eyewear optical power certificate.',
-    multiModalFocus: 'Visual Computer Vision (35%) + Color / Attribute extraction (25%)',
-    sampleItems: ['Hydro Flask 32oz (Olive Green)', 'Ray-Ban Wayfarer Glasses', 'Casio Vintage Digital Watch']
+    multiModalFocus: 'Visual Computer Vision (35%) + Color / Attribute extraction (25%)'
   },
   {
     id: 'Keys',
@@ -178,8 +173,7 @@ const TAXONOMY_CATEGORIES = [
       'Remote fob buttons and physical key cuts'
     ],
     verificationProof: 'Physical trial of the key in the student hostel room lock or vehicle ignition supervised by security.',
-    multiModalFocus: 'Computer vision key-count & keychain token detection + Attribute color matching',
-    sampleItems: ['Hostel Room 304 Brass Key with Marvel Fob', 'Honda Activa Key with Red Lanyard']
+    multiModalFocus: 'Computer vision key-count & keychain token detection + Attribute color matching'
   },
   {
     id: 'Clothing',
@@ -194,8 +188,7 @@ const TAXONOMY_CATEGORIES = [
       'Itemized list of contents inside inner compartments'
     ],
     verificationProof: 'Accurate description of unannounced items inside pockets before unzipping.',
-    multiModalFocus: 'Visual texture/color extraction (40%) + Compartment attribute matching',
-    sampleItems: ['Nike All-Conditions Backpack', 'College Varsity Jacket (Navy/Grey)', 'Wildcraft Gym Duffel']
+    multiModalFocus: 'Visual texture/color extraction (40%) + Compartment attribute matching'
   }
 ];
 
@@ -487,16 +480,32 @@ export default function App() {
     }
   };
 
-  const handleReSeed = async () => {
-    if (!window.confirm('Reset database and seed benchmark multi-modal dataset (5 Lost & 5 Found pairs)?')) return;
+  const handleRecalculate = async () => {
     try {
       setLoading(true);
-      await fetch(`${API_BASE}/api/seed`, { method: 'POST' });
+      await fetch(`${API_BASE}/api/recompute-all`, { method: 'POST' });
       fetchStats();
       fetchMatches();
       fetchItems();
       fetchClaims();
-      showNotification('Benchmark Loaded!', 'Standardized multi-modal test dataset successfully re-seeded.');
+      showNotification('AI Engine Synchronized', 'Recalculated similarity vectors across active articles.');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm('Are you sure you want to purge all records from the database? This cannot be undone.')) return;
+    try {
+      setLoading(true);
+      await fetch(`${API_BASE}/api/clear`, { method: 'POST' });
+      fetchStats();
+      fetchMatches();
+      fetchItems();
+      fetchClaims();
+      showNotification('Database Cleared', 'All real-time items and claims have been cleared.');
     } catch (e) {
       console.error(e);
     } finally {
@@ -843,15 +852,33 @@ export default function App() {
               </div>
             </div>
 
-            {/* Empty State */}
-            {filteredItems.length === 0 && (
+            {/* Empty States */}
+            {items.length === 0 ? (
+              <div className="glass-panel p-12 text-center border-dashed border-slate-200 bg-white">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-3">
+                  <Search className="w-7 h-7" />
+                </div>
+                <h3 className="font-bold text-slate-800 text-base">No Articles Reported Yet</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  The campus lost and found directory is currently empty. As users file real-time lost and found reports, they will be indexed and displayed here.
+                </p>
+                <div className="mt-4">
+                  <button
+                    onClick={() => setActiveTab('report')}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
+                  >
+                    File First Report
+                  </button>
+                </div>
+              </div>
+            ) : filteredItems.length === 0 ? (
               <div className="glass-panel p-12 text-center border-dashed border-slate-200 bg-white">
                 <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-3">
                   <Search className="w-7 h-7" />
                 </div>
                 <h3 className="font-bold text-slate-800 text-base">No Matching Articles Found</h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  No records match your selected query and category filters. Try clearing filters or submit a new report.
+                  No records match your selected query and category filters. Try clearing filters.
                 </p>
                 <div className="mt-4 flex items-center justify-center gap-3">
                   <button
@@ -860,15 +887,9 @@ export default function App() {
                   >
                     Reset Filters
                   </button>
-                  <button
-                    onClick={() => setActiveTab('report')}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition shadow-sm"
-                  >
-                    File New Report
-                  </button>
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* Grid View */}
             {viewMode === 'grid' && filteredItems.length > 0 && (
@@ -1164,7 +1185,31 @@ export default function App() {
             </div>
 
             {/* Match Cards List */}
-            {filteredMatches.length === 0 ? (
+            {matches.length === 0 ? (
+              <div className="glass-panel p-12 text-center border-dashed border-slate-200 bg-white">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-3">
+                  <Radar className="w-7 h-7" />
+                </div>
+                <h3 className="font-bold text-slate-800 text-base">No Matching Pairs Detected Yet</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  The multi-modal AI engine runs in real time. Once users file both lost and found reports, candidates will be evaluated and displayed on this radar.
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => setActiveTab('report')}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
+                  >
+                    File an Item Report
+                  </button>
+                  <button
+                    onClick={fetchMatches}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+                  >
+                    Refresh Radar
+                  </button>
+                </div>
+              </div>
+            ) : filteredMatches.length === 0 ? (
               <div className="glass-panel p-12 text-center border-dashed border-slate-200 bg-white">
                 <Radar className="w-10 h-10 text-slate-400 mx-auto mb-2 opacity-50" />
                 <h3 className="font-bold text-slate-700 text-sm">No matches found above {radarThreshold}% threshold</h3>
@@ -1920,20 +1965,29 @@ export default function App() {
                   <span>Campus Security Administration & Audit</span>
                 </div>
                 <h1 className="text-2xl font-extrabold text-slate-900 font-['Outfit'] mt-1">
-                  Claims Verification & Benchmark System
+                  Claims Verification & System Controls
                 </h1>
                 <p className="text-xs text-slate-600 mt-1">
-                  Evaluate ownership proof, authorize item release, and manage campus incident states.
+                  Evaluate real-time ownership proof, authorize article releases, and audit incident records.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={handleReSeed}
-                  className="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center gap-2 transition shadow-sm"
+                  onClick={handleRecalculate}
+                  className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center gap-2 transition shadow-sm"
+                  title="Re-run neural vector matching on all reported articles"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  <span>Reset / Seed Benchmark Data</span>
+                  <span>Recalculate Matches</span>
+                </button>
+                <button
+                  onClick={handleClearAll}
+                  className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2 transition"
+                  title="Purge all database records"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Clear All Records</span>
                 </button>
               </div>
             </div>
@@ -1975,7 +2029,8 @@ export default function App() {
                 {claims.length === 0 ? (
                   <div className="glass-panel p-12 text-center border-dashed border-slate-200 bg-white">
                     <ShieldCheck className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500">No student ownership claims logged.</p>
+                    <h3 className="font-bold text-slate-800 text-sm">No Ownership Claims Filed</h3>
+                    <p className="text-xs text-slate-500 mt-1">When students claim found articles, their verification proof and contact info will appear here for authorization.</p>
                   </div>
                 ) : (
                   claims.map(claim => {
@@ -2044,48 +2099,54 @@ export default function App() {
             {/* Incident Logs Table */}
             {adminTab === 'reports' && (
               <div className="glass-panel overflow-hidden border-slate-200 bg-white">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                        <th className="p-3.5">ID</th>
-                        <th className="p-3.5">Type</th>
-                        <th className="p-3.5">Title</th>
-                        <th className="p-3.5">Category</th>
-                        <th className="p-3.5">Location</th>
-                        <th className="p-3.5">Date</th>
-                        <th className="p-3.5">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {items.map(item => (
-                        <tr key={item.id} className="hover:bg-blue-50/40">
-                          <td className="p-3.5 font-mono text-slate-400">#{item.id}</td>
-                          <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              item.type === 'LOST' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
-                            }`}>
-                              {item.type}
-                            </span>
-                          </td>
-                          <td className="p-3.5 font-semibold text-slate-900">{item.title}</td>
-                          <td className="p-3.5 text-slate-600">{item.category}</td>
-                          <td className="p-3.5 text-slate-600">{item.location}</td>
-                          <td className="p-3.5 text-slate-500">{item.date_lost_or_found}</td>
-                          <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              item.status === 'RESOLVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
-                              item.status === 'CLAIM_PENDING' ? 'bg-amber-50 text-amber-800 border-amber-300' :
-                              'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}>
-                              {item.status}
-                            </span>
-                          </td>
+                {items.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <p className="text-xs text-slate-500">No incident logs recorded yet. All user reports will be tracked here in real time.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                          <th className="p-3.5">ID</th>
+                          <th className="p-3.5">Type</th>
+                          <th className="p-3.5">Title</th>
+                          <th className="p-3.5">Category</th>
+                          <th className="p-3.5">Location</th>
+                          <th className="p-3.5">Date</th>
+                          <th className="p-3.5">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {items.map(item => (
+                          <tr key={item.id} className="hover:bg-blue-50/40">
+                            <td className="p-3.5 font-mono text-slate-400">#{item.id}</td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                item.type === 'LOST' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}>
+                                {item.type}
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-semibold text-slate-900">{item.title}</td>
+                            <td className="p-3.5 text-slate-600">{item.category}</td>
+                            <td className="p-3.5 text-slate-600">{item.location}</td>
+                            <td className="p-3.5 text-slate-500">{item.date_lost_or_found}</td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                item.status === 'RESOLVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                item.status === 'CLAIM_PENDING' ? 'bg-amber-50 text-amber-800 border-amber-300' :
+                                'bg-slate-50 text-slate-700 border-slate-200'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
