@@ -3,7 +3,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "lost_and_found.db")
+if os.environ.get("VERCEL"):
+    DB_PATH = "/tmp/lost_and_found.db"
+else:
+    DB_PATH = os.path.join(BASE_DIR, "lost_and_found.db")
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # Ensure SQLite handles threads properly and enforces foreign keys
