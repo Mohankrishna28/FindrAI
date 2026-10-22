@@ -10,7 +10,13 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-const API_BASE = ''; // Routed via Vite proxy
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE}${url}`;
+};
 
 // Circular Gauge Component for Match Confidence - Google Styled
 function CircularGauge({ score, size = 80, strokeWidth = 7 }) {
@@ -906,7 +912,7 @@ export default function App() {
                         <div className="relative h-44 bg-slate-100 overflow-hidden border-b border-slate-100">
                           {item.image_url ? (
                             <img 
-                              src={item.image_url} 
+                              src={getImageUrl(item.image_url)} 
                               alt={item.title} 
                               className="w-full h-full object-cover transition duration-300 hover:scale-105" 
                             />
@@ -1011,7 +1017,7 @@ export default function App() {
                         <div className="flex items-center gap-3">
                           <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
                             {item.image_url ? (
-                              <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+                              <img src={getImageUrl(item.image_url)} alt={item.title} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-slate-400">
                                 <Camera className="w-5 h-5" />
@@ -1280,7 +1286,7 @@ export default function App() {
                         <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-100 flex items-start gap-3">
                           <div className="w-14 h-14 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-rose-200">
                             {lost.image_url ? (
-                              <img src={lost.image_url} alt={lost.title} className="w-full h-full object-cover" />
+                              <img src={getImageUrl(lost.image_url)} alt={lost.title} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-rose-300">
                                 <Camera className="w-6 h-6" />
@@ -1305,7 +1311,7 @@ export default function App() {
                         <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 flex items-start gap-3">
                           <div className="w-14 h-14 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-blue-200">
                             {found.image_url ? (
-                              <img src={found.image_url} alt={found.title} className="w-full h-full object-cover" />
+                              <img src={getImageUrl(found.image_url)} alt={found.title} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-blue-300">
                                 <Camera className="w-6 h-6" />
