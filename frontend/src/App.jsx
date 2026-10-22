@@ -6,16 +6,24 @@ import {
   Sliders, ChevronRight, User, Award, ArrowRight, Info, Layers,
   Cpu, Activity, Zap, Compass, Building2, HelpCircle, FileText,
   Clock, Share2, CheckSquare, Flame, BarChart3, LayoutGrid, List,
-  Smartphone, Laptop, BookOpen, Key, Shirt, Glasses, CheckCheck
+  Smartphone, Laptop, BookOpen, Key, Shirt, Glasses, CheckCheck,
+  Server, Link2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+let currentApiBase = '';
+if (typeof window !== 'undefined') {
+  currentApiBase = localStorage.getItem('FINDR_API_BASE') || import.meta.env.VITE_API_BASE_URL || '';
+  currentApiBase = currentApiBase.trim().replace(/\/+$/, '');
+}
+
+const getApiBase = () => currentApiBase;
 
 const getImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${API_BASE}${url}`;
+  const base = getApiBase();
+  return `${base}${url}`;
 };
 
 // Circular Gauge Component for Match Confidence - Google Styled
@@ -264,6 +272,44 @@ export default function App() {
   // Admin filter
   const [adminTab, setAdminTab] = useState('claims');
 
+  // Backend API URL State & Local Configuration
+  const [apiBaseUrl, setApiBaseUrl] = useState(getApiBase);
+  const [customApiInput, setCustomApiInput] = useState(getApiBase);
+  const [apiModalOpen, setApiModalOpen] = useState(false);
+  const [apiTesting, setApiTesting] = useState(false);
+  const [apiConnected, setApiConnected] = useState(null);
+
+  const handleSaveApiUrl = async (newUrl) => {
+    const cleanUrl = (newUrl || '').trim().replace(/\/+$/, '');
+    setApiTesting(true);
+    try {
+      const testRes = await fetch(`${cleanUrl}/api/health`);
+      if (testRes.ok) {
+        if (typeof window !== 'undefined') {
+          if (cleanUrl) localStorage.setItem('FINDR_API_BASE', cleanUrl);
+          else localStorage.removeItem('FINDR_API_BASE');
+        }
+        currentApiBase = cleanUrl;
+        setApiBaseUrl(cleanUrl);
+        setApiConnected(true);
+        showNotification('Backend Connected!', `Connected to ${cleanUrl || 'local proxy'}`);
+        setApiModalOpen(false);
+        fetchStats(cleanUrl);
+        fetchMatches(cleanUrl);
+        fetchItems(cleanUrl);
+        fetchClaims(cleanUrl);
+      } else {
+        alert('Connected to host, but health check failed. Verify the URL is your FastAPI backend.');
+        setApiConnected(false);
+      }
+    } catch (e) {
+      alert(`Could not connect to ${cleanUrl}. Check the URL and verify the backend is online.`);
+      setApiConnected(false);
+    } finally {
+      setApiTesting(false);
+    }
+  };
+
   // Initial Data Fetch
   useEffect(() => {
     fetchStats();
@@ -285,22 +331,28 @@ export default function App() {
     setTimeout(() => setNotification(null), 6000);
   };
 
-  const fetchStats = async () => {
+  const fetchStats = async (base = getApiBase()) => {
     try {
-      const res = await fetch(`${API_BASE}/api/stats`);
-      const data = await res.json();
-      setStats(data);
+      const res = await fetch(`${base}/api/stats`);
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+        setApiConnected(true);
+      }
     } catch (e) {
       console.error('Failed to load stats', e);
+      setApiConnected(false);
     }
   };
 
-  const fetchMatches = async () => {
+  const fetchMatches = async (base = getApiBase()) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/api/matches?min_score=40`);
-      const data = await res.json();
-      setMatches(data);
+      const res = await fetch(`${base}/api/matches?min_score=40`);
+      if (res.ok) {
+        const data = await res.json();
+        setMatches(data);
+      }
     } catch (e) {
       console.error('Failed to load matches', e);
     } finally {
@@ -308,21 +360,25 @@ export default function App() {
     }
   };
 
-  const fetchItems = async () => {
+  const fetchItems = async (base = getApiBase()) => {
     try {
-      const res = await fetch(`${API_BASE}/api/items`);
-      const data = await res.json();
-      setItems(data);
+      const res = await fetch(`${base}/api/items`);
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data);
+      }
     } catch (e) {
       console.error('Failed to load items', e);
     }
   };
 
-  const fetchClaims = async () => {
+  const fetchClaims = async (base = getApiBase()) => {
     try {
-      const res = await fetch(`${API_BASE}/api/claims`);
-      const data = await res.json();
-      setClaims(data);
+      const res = await fetch(`${base}/api/claims`);
+      if (res.ok) {
+        const data = await res.json();
+        setClaims(data);
+      }
     } catch (e) {
       console.error('Failed to load claims', e);
     }
@@ -350,7 +406,7 @@ export default function App() {
         }
       });
 
-      const res = await fetch(`${API_BASE}/api/items`, {
+      const res = await fetch(`${getApiBase()}/api/items`, {
         method: 'POST',
         body: payload
       });
@@ -392,7 +448,10 @@ export default function App() {
       }
     } catch (err) {
       console.error('Submit error:', err);
-      alert('Network or server error while submitting report');
+      if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') && !getApiBase()) {
+        setApiModalOpen(true);
+      }
+      alert('Network or server error while submitting report. If running on Vercel, click "Connect Backend API" at the top to link your backend.');
     } finally {
       setFormSubmitting(false);
     }
@@ -403,7 +462,7 @@ export default function App() {
     if (!claimModalData) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/claims`, {
+      const res = await fetch(`${getApiBase()}/api/claims`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -439,7 +498,7 @@ export default function App() {
 
   const handleReviewClaim = async (claimId, status) => {
     try {
-      const res = await fetch(`${API_BASE}/api/claims/${claimId}/review`, {
+      const res = await fetch(`${getApiBase()}/api/claims/${claimId}/review`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -467,7 +526,7 @@ export default function App() {
 
   const handleMatchStatus = async (matchId, newStatus) => {
     try {
-      const res = await fetch(`${API_BASE}/api/matches/${matchId}/status`, {
+      const res = await fetch(`${getApiBase()}/api/matches/${matchId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -489,7 +548,7 @@ export default function App() {
   const handleRecalculate = async () => {
     try {
       setLoading(true);
-      await fetch(`${API_BASE}/api/recompute-all`, { method: 'POST' });
+      await fetch(`${getApiBase()}/api/recompute-all`, { method: 'POST' });
       fetchStats();
       fetchMatches();
       fetchItems();
@@ -506,7 +565,7 @@ export default function App() {
     if (!window.confirm('Are you sure you want to purge all records from the database? This cannot be undone.')) return;
     try {
       setLoading(true);
-      await fetch(`${API_BASE}/api/clear`, { method: 'POST' });
+      await fetch(`${getApiBase()}/api/clear`, { method: 'POST' });
       fetchStats();
       fetchMatches();
       fetchItems();
@@ -565,16 +624,47 @@ export default function App() {
       )}
 
       {/* Top Banner: Modern Clean Institutional System Status */}
-      <div className="bg-gradient-to-r from-blue-50 via-slate-50 to-indigo-50 border-b border-blue-100/80 px-4 py-1.5 text-center text-[11px] text-slate-600 flex items-center justify-center gap-3">
+      <div className="bg-gradient-to-r from-blue-50 via-slate-50 to-indigo-50 border-b border-blue-100/80 px-4 py-1.5 text-center text-[11px] text-slate-600 flex items-center justify-center gap-3 flex-wrap">
         <span className="flex items-center gap-1.5 text-blue-700 font-bold tracking-wide">
           <Sparkles className="w-3.5 h-3.5 text-blue-600" /> FindrAI Intelligent Campus Retrieval Network
         </span>
         <span className="hidden sm:inline text-slate-300">•</span>
         <span className="hidden sm:inline text-slate-500">Multi-Modal Semantic NLP & Computer Vision Architecture</span>
-        <span className="hidden md:inline px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium text-[10px] border border-emerald-200">
-          ● Neural Engine Active
-        </span>
+        <button
+          onClick={() => {
+            setCustomApiInput(apiBaseUrl || 'https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app');
+            setApiModalOpen(true);
+          }}
+          className={`px-2.5 py-0.5 rounded-full font-medium text-[10px] border flex items-center gap-1.5 transition cursor-pointer ${
+            apiConnected === true 
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+              : apiConnected === false
+              ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+              : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+          }`}
+          title="Click to configure backend API URL"
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${apiConnected === true ? 'bg-emerald-500' : apiConnected === false ? 'bg-rose-500 animate-ping' : 'bg-blue-500'}`} />
+          {apiBaseUrl ? (apiConnected ? 'Backend Connected' : 'Backend Offline (Click to edit)') : '⚙️ Connect Backend API'}
+        </button>
       </div>
+
+      {/* Prominent Alert Banner when on Vercel and no Backend Connected */}
+      {(!apiBaseUrl && typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center text-xs text-amber-900 flex items-center justify-center gap-2 flex-wrap">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <span><strong>Action Required:</strong> Frontend is not linked to your backend API. Submit report or claims require backend connection.</span>
+          <button
+            onClick={() => {
+              setCustomApiInput('https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app');
+              setApiModalOpen(true);
+            }}
+            className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition"
+          >
+            Connect Backend Now
+          </button>
+        </div>
+      )}
 
       {/* Main App Navigation Bar - Google Themed */}
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/90 border-b border-slate-200/80 px-4 lg:px-8 py-3 transition-all shadow-sm">
@@ -1978,7 +2068,18 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    setCustomApiInput(apiBaseUrl || 'https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app');
+                    setApiModalOpen(true);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-2 transition"
+                  title="Configure backend API URL"
+                >
+                  <Server className="w-4 h-4 text-blue-600" />
+                  <span>Backend Settings</span>
+                </button>
                 <button
                   onClick={handleRecalculate}
                   className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center gap-2 transition shadow-sm"
@@ -2452,6 +2553,113 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Backend API Configuration Modal */}
+      {apiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                  <Server className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Connect Backend API</h3>
+                  <p className="text-xs text-slate-500">Link your deployed FastAPI backend to this frontend</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setApiModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  FastAPI Backend URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://your-backend.vercel.app"
+                    value={customApiInput}
+                    onChange={(e) => setCustomApiInput(e.target.value)}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={apiTesting}
+                    onClick={() => handleSaveApiUrl(customApiInput)}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {apiTesting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Testing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Save & Link</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Saved instantly in your browser storage. Works without redeploying.
+                </p>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+                <p className="text-[11px] font-bold text-slate-700">Quick Fill Presets:</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomApiInput('https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app')}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-blue-700 hover:border-blue-300 font-mono shadow-xs"
+                  >
+                    Use Deployed Vercel Backend
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomApiInput('http://127.0.0.1:8000')}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-slate-300 font-mono shadow-xs"
+                  >
+                    Localhost (127.0.0.1:8000)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomApiInput('');
+                      handleSaveApiUrl('');
+                    }}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 hover:border-slate-300 shadow-xs"
+                  >
+                    Reset (Relative /)
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-600 leading-relaxed bg-blue-50/70 p-3.5 rounded-xl border border-blue-100">
+                <p className="font-bold text-blue-800 mb-1 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5" /> Where to find Environment Variables on Vercel:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-600">
+                  <li>Go to <strong>vercel.com/dashboard</strong></li>
+                  <li>Click on your <strong>findr-ai</strong> project (not your profile photo)</li>
+                  <li>Click the <strong>Settings</strong> tab at the top bar</li>
+                  <li>Click <strong>Environment Variables</strong> in the left sidebar</li>
+                  <li>Add Key: <code className="bg-white px-1 py-0.5 rounded border border-blue-200 text-blue-900 font-mono">VITE_API_BASE_URL</code> with your backend URL.</li>
+                </ol>
+              </div>
+            </div>
           </div>
         </div>
       )}
