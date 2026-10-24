@@ -11,10 +11,31 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
 
 from backend.database import get_db
-from backend.models import ItemReport, MatchResult, ClaimRequest
+from backend.models import ItemReport, MatchResult, ClaimRequest, User
 from backend.matcher import get_text_embedding, get_image_embedding, compute_all_matches_for_item, evaluate_match
+import hashlib
 
 router = APIRouter(prefix="/api")
+
+AUTH_SALT = "findrai_secure_salt_v1"
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256((AUTH_SALT + password).encode("utf-8")).hexdigest()
+
+DEMO_ACCOUNTS = {
+    "admin@campus.edu": {
+        "email": "admin@campus.edu",
+        "full_name": "Campus Security Officer",
+        "role": "admin",
+        "password": "admin123"
+    },
+    "student@campus.edu": {
+        "email": "student@campus.edu",
+        "full_name": "Alex Student",
+        "role": "user",
+        "password": "student123"
+    }
+}
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if os.environ.get("VERCEL"):
@@ -27,6 +48,101 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @router.get("/health")
 def health_check():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+@router.post("/auth/login")
+def login(payload: dict, db: Session = Depends(get_db)):
+    email = payload.get("email", "").strip().lower()
+    password = payload.get("password", "").strip()
+    target_role = payload.get("role") # optional requested role filter e.g. "admin" or "user"
+
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+
+    user = db.query(User).filter(User.email == email).first()
+
+    # Auto-seed demo accounts if they don't exist yet
+    if not user and email in DEMO_ACCOUNTS:
+        demo = DEMO_ACCOUNTS[email]
+        user = User(
+            email=demo["email"],
+            full_name=demo["full_name"],
+            role=demo["role"],
+            password_hash=hash_password(demo["password"])
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if user.password_hash != hash_password(password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # If user selected Admin portal login, verify they have admin privileges
+    if target_role == "admin" and user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Access Denied: This account does not possess Security Administrator privileges. Please use Student / User login."
+        )
+
+    token = f"token_{user.id}_{user.role}_{uuid.uuid4().hex[:12]}"
+
+    return {
+        "success": True,
+        "token": token,
+        "user": user.to_dict()
+    }
+
+
+@router.post("/auth/register")
+def register(payload: dict, db: Session = Depends(get_db)):
+    email = payload.get("email", "").strip().lower()
+    password = payload.get("password", "").strip()
+    full_name = payload.get("full_name", "").strip()
+    role = payload.get("role", "user").strip().lower()
+
+    if not email or not password or not full_name:
+        raise HTTPException(status_code=400, detail="Email, password, and full name are required")
+
+    if role not in ["user", "admin"]:
+        role = "user"
+
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+
+    new_user = User(
+        email=email,
+        full_name=full_name,
+        role=role,
+        password_hash=hash_password(password)
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    token = f"token_{new_user.id}_{new_user.role}_{uuid.uuid4().hex[:12]}"
+
+    return {
+        "success": True,
+        "token": token,
+        "user": new_user.to_dict()
+    }
+
+
+@router.get("/auth/me")
+def get_current_user(token: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    if not token:
+        return {"authenticated": False, "user": None}
+    # Parse mock token format token_{user_id}_{role}_{uuid}
+    parts = token.split("_")
+    if len(parts) >= 2 and parts[1].isdigit():
+        user = db.query(User).filter(User.id == int(parts[1])).first()
+        if user:
+            return {"authenticated": True, "user": user.to_dict()}
+    return {"authenticated": False, "user": None}
 
 
 @router.post("/items")
@@ -210,12 +326,46 @@ def update_item_status(item_id: int, payload: dict, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Item not found")
 
     new_status = payload.get("status", "").upper()
-    if new_status not in ["OPEN", "CLAIM_PENDING", "RESOLVED"]:
-        raise HTTPException(status_code=400, detail="Invalid status")
+    if new_status:
+        if new_status not in ["OPEN", "CLAIM_PENDING", "RESOLVED"]:
+            raise HTTPException(status_code=400, detail="Invalid status")
+        item.status = new_status
 
-    item.status = new_status
+    if "approval_status" in payload:
+        app_status = payload.get("approval_status", "").upper()
+        if app_status in ["APPROVED", "REJECTED", "PENDING"]:
+            try:
+                item.approval_status = app_status
+            except Exception:
+                pass
+
     db.commit()
     return item.to_dict()
+
+
+@router.patch("/items/{item_id}/approve")
+def approve_item(item_id: int, payload: dict, db: Session = Depends(get_db)):
+    item = db.query(ItemReport).filter(ItemReport.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    approval_status = payload.get("approval_status", "APPROVED").upper()
+    if approval_status not in ["APPROVED", "REJECTED", "PENDING"]:
+        raise HTTPException(status_code=400, detail="Invalid approval status")
+
+    try:
+        item.approval_status = approval_status
+    except Exception:
+        pass
+
+    if payload.get("status"):
+        new_status = payload.get("status").upper()
+        if new_status in ["OPEN", "CLAIM_PENDING", "RESOLVED"]:
+            item.status = new_status
+
+    db.commit()
+    return item.to_dict()
+
 
 
 @router.get("/matches")

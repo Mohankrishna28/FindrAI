@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.database import Base, engine
+import backend.models
 from backend.routes import router
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -11,6 +12,16 @@ from fastapi import Request
 
 # Create database tables if they do not exist
 Base.metadata.create_all(bind=engine)
+
+# Safe SQLite migration if approval_status column was added to existing table
+try:
+    with engine.connect() as conn:
+        from sqlalchemy import text
+        conn.execute(text("ALTER TABLE item_reports ADD COLUMN approval_status VARCHAR(20) DEFAULT 'APPROVED'"))
+        conn.commit()
+except Exception:
+    pass
+
 
 app = FastAPI(
     title="AI-Powered Lost & Found Matching Platform",

@@ -23,6 +23,8 @@ class ItemReport(Base):
     reporter_contact = Column(String(150), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    approval_status = Column(String(20), default="APPROVED", index=True) # "PENDING", "APPROVED", "REJECTED"
+
     # Relationships
     lost_matches = relationship("MatchResult", foreign_keys="MatchResult.lost_item_id", back_populates="lost_item", cascade="all, delete-orphan")
     found_matches = relationship("MatchResult", foreign_keys="MatchResult.found_item_id", back_populates="found_item", cascade="all, delete-orphan")
@@ -42,10 +44,31 @@ class ItemReport(Base):
             "image_url": self.image_url,
             "has_image": bool(self.image_url),
             "status": self.status,
+            "approval_status": getattr(self, "approval_status", "APPROVED") or "APPROVED",
             "reporter_name": self.reporter_name,
             "reporter_contact": self.reporter_contact,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(150), unique=True, nullable=False, index=True)
+    full_name = Column(String(100), nullable=False)
+    role = Column(String(20), default="user", nullable=False, index=True) # "user" or "admin"
+    password_hash = Column(String(256), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "full_name": self.full_name,
+            "role": self.role,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class MatchResult(Base):
     __tablename__ = "match_results"
