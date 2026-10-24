@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-const DEFAULT_BACKEND_URL = 'https://findr-ai-zh93.vercel.app';
+const DEFAULT_BACKEND_URL = 'https://findrai-zfnm.onrender.com';
 
 let currentApiBase = '';
 if (typeof window !== 'undefined') {
@@ -734,7 +734,7 @@ export default function App() {
         <span className="hidden sm:inline text-slate-500">Multi-Modal Semantic NLP & Computer Vision Architecture</span>
         <button
           onClick={() => {
-            setCustomApiInput(apiBaseUrl || 'https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app');
+            setCustomApiInput(apiBaseUrl || 'https://findrai-zfnm.onrender.com');
             setApiModalOpen(true);
           }}
           className={`px-2.5 py-0.5 rounded-full font-medium text-[10px] border flex items-center gap-1.5 transition cursor-pointer ${
@@ -758,7 +758,7 @@ export default function App() {
           <span><strong>Action Required:</strong> Frontend is not linked to your backend API. Submit report or claims require backend connection.</span>
           <button
             onClick={() => {
-              setCustomApiInput('https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app');
+              setCustomApiInput('https://findrai-zfnm.onrender.com');
               setApiModalOpen(true);
             }}
             className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition"
@@ -2198,7 +2198,7 @@ export default function App() {
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => {
-                    setCustomApiInput(apiBaseUrl || 'https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app');
+                    setCustomApiInput(apiBaseUrl || 'https://findrai-zfnm.onrender.com');
                     setApiModalOpen(true);
                   }}
                   className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-2 transition"
@@ -2749,7 +2749,7 @@ export default function App() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setCustomApiInput('https://findr-ai-zh93-qgr0j25sn-mk-ff85.vercel.app')}
+                    onClick={() => setCustomApiInput('https://findrai-zfnm.onrender.com')}
                     className="text-[11px] px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-blue-700 hover:border-blue-300 font-mono shadow-xs"
                   >
                     Use Deployed Vercel Backend
