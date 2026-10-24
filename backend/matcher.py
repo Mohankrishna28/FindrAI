@@ -97,79 +97,99 @@ def get_text_embedding(text: str) -> list:
     return _fallback_text_embedding(text)
 
 
+def _load_pil_image(image_input):
+    """Safely extracts a PIL Image from path, PIL Image, bytes, or BytesIO."""
+    if image_input is None:
+        return None
+    try:
+        if isinstance(image_input, Image.Image):
+            return image_input.copy()
+        if isinstance(image_input, (str, os.PathLike)):
+            if os.path.exists(image_input):
+                return Image.open(image_input)
+            return None
+        if isinstance(image_input, (bytes, bytearray)):
+            import io
+            return Image.open(io.BytesIO(image_input))
+        if hasattr(image_input, 'read'):
+            return Image.open(image_input)
+    except Exception:
+        return None
+    return None
+
 # --- Fallback & Deterministic Image Feature Extractor ---
-def _fallback_image_embedding(image_path: str, dim: int = 512) -> list:
+def _fallback_image_embedding(image_input, dim: int = 512) -> list:
     """
     Extracts multi-resolution spatial color histogram, luminance gradients,
     and perceptual texture moments normalized into a 512-dim unit vector.
     """
-    if not os.path.exists(image_path):
+    img = _load_pil_image(image_input)
+    if img is None:
         return None
 
     try:
-        with Image.open(image_path) as img:
-            img = img.convert("RGB")
-            # 1. 8x8 spatial grid color distribution (64 patches * 6 stats = 384 dims)
-            img_grid = img.resize((32, 32), Image.Resampling.BILINEAR)
-            arr = np.array(img_grid, dtype=np.float32) / 255.0
+        img = img.convert("RGB")
+        # 1. 8x8 spatial grid color distribution (64 patches * 6 stats = 384 dims)
+        img_grid = img.resize((32, 32), Image.Resampling.BILINEAR)
+        arr = np.array(img_grid, dtype=np.float32) / 255.0
 
-            feats = []
-            # Grid 4x4 blocks
-            for r in range(4):
-                for c in range(4):
-                    block = arr[r*8:(r+1)*8, c*8:(c+1)*8]
-                    mean_rgb = block.mean(axis=(0, 1))
-                    std_rgb = block.std(axis=(0, 1))
-                    feats.extend(mean_rgb.tolist())
-                    feats.extend(std_rgb.tolist())
+        feats = []
+        # Grid 4x4 blocks
+        for r in range(4):
+            for c in range(4):
+                block = arr[r*8:(r+1)*8, c*8:(c+1)*8]
+                mean_rgb = block.mean(axis=(0, 1))
+                std_rgb = block.std(axis=(0, 1))
+                feats.extend(mean_rgb.tolist())
+                feats.extend(std_rgb.tolist())
 
-            # 2. Overall HSV & Luminance distribution (96 dims)
-            hsv_img = img.convert("HSV").resize((64, 64))
-            hsv_arr = np.array(hsv_img, dtype=np.float32) / 255.0
-            h_hist, _ = np.histogram(hsv_arr[:, :, 0], bins=32, range=(0, 1))
-            s_hist, _ = np.histogram(hsv_arr[:, :, 1], bins=32, range=(0, 1))
-            v_hist, _ = np.histogram(hsv_arr[:, :, 2], bins=32, range=(0, 1))
-            feats.extend(h_hist.tolist())
-            feats.extend(s_hist.tolist())
-            feats.extend(v_hist.tolist())
+        # 2. Overall HSV & Luminance distribution (96 dims)
+        hsv_img = img.convert("HSV").resize((64, 64))
+        hsv_arr = np.array(hsv_img, dtype=np.float32) / 255.0
+        h_hist, _ = np.histogram(hsv_arr[:, :, 0], bins=32, range=(0, 1))
+        s_hist, _ = np.histogram(hsv_arr[:, :, 1], bins=32, range=(0, 1))
+        v_hist, _ = np.histogram(hsv_arr[:, :, 2], bins=32, range=(0, 1))
+        feats.extend(h_hist.tolist())
+        feats.extend(s_hist.tolist())
+        feats.extend(v_hist.tolist())
 
-            # 3. Edge / gradient texture (32 dims)
-            gray = img.convert("L").resize((32, 32))
-            g_arr = np.array(gray, dtype=np.float32)
-            dx = np.abs(np.diff(g_arr, axis=1)).mean(axis=0) # 31 dims
-            feats.extend(dx[:32].tolist())
+        # 3. Edge / gradient texture (32 dims)
+        gray = img.convert("L").resize((32, 32))
+        g_arr = np.array(gray, dtype=np.float32)
+        dx = np.abs(np.diff(g_arr, axis=1)).mean(axis=0) # 31 dims
+        feats.extend(dx[:32].tolist())
 
-            # Pad or slice to exactly dim
-            vec = np.zeros(dim, dtype=np.float32)
-            usable = min(len(feats), dim)
-            vec[:usable] = feats[:usable]
+        # Pad or slice to exactly dim
+        vec = np.zeros(dim, dtype=np.float32)
+        usable = min(len(feats), dim)
+        vec[:usable] = feats[:usable]
 
-            norm = np.linalg.norm(vec)
-            if norm > 1e-6:
-                vec = vec / norm
-            return vec.tolist()
+        norm = np.linalg.norm(vec)
+        if norm > 1e-6:
+            vec = vec / norm
+        return vec.tolist()
     except Exception:
         return None
 
 
-def get_image_embedding(image_path: str) -> list:
+def get_image_embedding(image_input) -> list:
     """Generates an image embedding vector using Torchvision MobileNet or perceptual feature extractor."""
     init_ml_models()
-    if _vision_model is not None and _vision_transform is not None and os.path.exists(image_path):
+    img = _load_pil_image(image_input)
+    if img is not None and _vision_model is not None and _vision_transform is not None:
         try:
             import torch
-            with Image.open(image_path) as img:
-                img = img.convert("RGB")
-                tensor = _vision_transform(img).unsqueeze(0)
-                with torch.no_grad():
-                    emb = _vision_model(tensor).squeeze().numpy()
-                norm = np.linalg.norm(emb)
-                if norm > 1e-6:
-                    emb = emb / norm
-                return emb.tolist()
+            img_rgb = img.convert("RGB")
+            tensor = _vision_transform(img_rgb).unsqueeze(0)
+            with torch.no_grad():
+                emb = _vision_model(tensor).squeeze().numpy()
+            norm = np.linalg.norm(emb)
+            if norm > 1e-6:
+                emb = emb / norm
+            return emb.tolist()
         except Exception:
             pass
-    return _fallback_image_embedding(image_path)
+    return _fallback_image_embedding(image_input)
 
 
 # --- Cosine Similarity Helper ---

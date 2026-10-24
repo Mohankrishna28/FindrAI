@@ -21,9 +21,41 @@ if (typeof window !== 'undefined') {
 
 const getApiBase = () => currentApiBase || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') ? DEFAULT_BACKEND_URL : '');
 
+const LOCAL_ITEMS_KEY = 'FINDR_REPORTED_ITEMS';
+
+const getStoredLocalItems = () => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_ITEMS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+const saveLocalItem = (item) => {
+  if (typeof window === 'undefined' || !item) return;
+  try {
+    const current = getStoredLocalItems();
+    const updated = [item, ...current.filter(i => i.id !== item.id)];
+    localStorage.setItem(LOCAL_ITEMS_KEY, JSON.stringify(updated.slice(0, 50)));
+  } catch (e) {
+    console.warn('Could not save local item', e);
+  }
+};
+
+const removeStoredLocalItem = (itemId) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const current = getStoredLocalItems();
+    const updated = current.filter(i => i.id !== itemId);
+    localStorage.setItem(LOCAL_ITEMS_KEY, JSON.stringify(updated));
+  } catch (e) {}
+};
+
 const getImageUrl = (url) => {
   if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
   const base = getApiBase() || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') ? DEFAULT_BACKEND_URL : '');
@@ -288,6 +320,7 @@ export default function App() {
   const handleDeleteItem = async (itemId, e) => {
     if (e) e.stopPropagation();
     if (!window.confirm('Delete this article record?')) return;
+    removeStoredLocalItem(itemId);
     try {
       const res = await fetch(`${getApiBase()}/api/items/${itemId}`, { method: 'DELETE' });
       if (res.ok) {
@@ -298,6 +331,7 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
+      fetchItems();
     }
   };
 
@@ -305,7 +339,10 @@ export default function App() {
     const cleanUrl = (newUrl || '').trim().replace(/\/+$/, '');
     setApiTesting(true);
     try {
-      const testRes = await fetch(`${cleanUrl}/api/health`);
+      const testRes = await fetch(`${cleanUrl}/api/health?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (testRes.ok) {
         if (typeof window !== 'undefined') {
           if (cleanUrl) localStorage.setItem('FINDR_API_BASE', cleanUrl);
@@ -355,7 +392,13 @@ export default function App() {
 
   const fetchStats = async (base = getApiBase()) => {
     try {
-      const res = await fetch(`${base}/api/stats`);
+      const res = await fetch(`${base}/api/stats?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -370,7 +413,13 @@ export default function App() {
   const fetchMatches = async (base = getApiBase()) => {
     try {
       setLoading(true);
-      const res = await fetch(`${base}/api/matches?min_score=40`);
+      const res = await fetch(`${base}/api/matches?min_score=40&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         setMatches(data);
@@ -384,19 +433,39 @@ export default function App() {
 
   const fetchItems = async (base = getApiBase()) => {
     try {
-      const res = await fetch(`${base}/api/items`);
+      const res = await fetch(`${base}/api/items?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (res.ok) {
-        const data = await res.json();
-        setItems(data);
+        const backendItems = await res.json();
+        const localItems = getStoredLocalItems();
+        // Merge backend items with local items to ensure reports never disappear across cold starts
+        const backendIds = new Set(backendItems.map(i => i.id));
+        const merged = [...backendItems, ...localItems.filter(i => !backendIds.has(i.id))];
+        setItems(merged);
       }
     } catch (e) {
       console.error('Failed to load items', e);
+      const localItems = getStoredLocalItems();
+      if (localItems.length > 0) {
+        setItems(localItems);
+      }
     }
   };
 
   const fetchClaims = async (base = getApiBase()) => {
     try {
-      const res = await fetch(`${base}/api/claims`);
+      const res = await fetch(`${base}/api/claims?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         setClaims(data);
@@ -435,6 +504,10 @@ export default function App() {
 
       const data = await res.json();
       if (data.success) {
+        if (data.item) {
+          saveLocalItem(data.item);
+        }
+
         showNotification(
           'Report Submitted & AI Match Matrix Updated!',
           data.high_confidence_detected 
@@ -461,10 +534,17 @@ export default function App() {
         setImagePreview(null);
         setReportStep(1);
 
-        fetchStats();
-        fetchMatches();
-        fetchItems();
-        setActiveTab('radar');
+        await Promise.all([
+          fetchStats(),
+          fetchMatches(),
+          fetchItems()
+        ]);
+
+        if (data.high_confidence_detected) {
+          setActiveTab('radar');
+        } else {
+          setActiveTab('explore');
+        }
       } else {
         alert('Error: ' + (data.detail || 'Failed to submit report'));
       }
@@ -1138,16 +1218,12 @@ export default function App() {
                       <div key={item.id} className="p-4 hover:bg-blue-50/40 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                           <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
-                            {item.image_url ? (
+                            {item.image_url && !imgFailed[item.id] ? (
                               <img 
                                 src={getImageUrl(item.image_url)} 
                                 alt={item.title} 
                                 className="w-full h-full object-cover" 
-                                onError={(e) => {
-                                  if (!e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
-                                    e.currentTarget.src = `https://findr-ai-zh93.vercel.app${item.image_url.startsWith('/') ? '' : '/'}${item.image_url}`;
-                                  }
-                                }}
+                                onError={() => setImgFailed(prev => ({ ...prev, [item.id]: true }))}
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-slate-400">
@@ -1416,16 +1492,12 @@ export default function App() {
                         {/* Lost Item Summary */}
                         <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-100 flex items-start gap-3">
                           <div className="w-14 h-14 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-rose-200">
-                            {lost.image_url ? (
+                            {lost.image_url && !imgFailed[`lost_${match.id}`] ? (
                               <img 
                                 src={getImageUrl(lost.image_url)} 
                                 alt={lost.title} 
                                 className="w-full h-full object-cover" 
-                                onError={(e) => {
-                                  if (lost.image_url && !e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
-                                    e.currentTarget.src = `https://findr-ai-zh93.vercel.app${lost.image_url.startsWith('/') ? '' : '/'}${lost.image_url}`;
-                                  }
-                                }}
+                                onError={() => setImgFailed(prev => ({ ...prev, [`lost_${match.id}`]: true }))}
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-rose-300">
@@ -1450,16 +1522,12 @@ export default function App() {
                         {/* Found Item Summary */}
                         <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 flex items-start gap-3">
                           <div className="w-14 h-14 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-blue-200">
-                            {found.image_url ? (
+                            {found.image_url && !imgFailed[`found_${match.id}`] ? (
                               <img 
                                 src={getImageUrl(found.image_url)} 
                                 alt={found.title} 
                                 className="w-full h-full object-cover" 
-                                onError={(e) => {
-                                  if (found.image_url && !e.currentTarget.src.includes('https://findr-ai-zh93.vercel.app')) {
-                                    e.currentTarget.src = `https://findr-ai-zh93.vercel.app${found.image_url.startsWith('/') ? '' : '/'}${found.image_url}`;
-                                  }
-                                }}
+                                onError={() => setImgFailed(prev => ({ ...prev, [`found_${match.id}`]: true }))}
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-blue-300">

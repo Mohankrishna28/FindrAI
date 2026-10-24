@@ -6,6 +6,9 @@ from fastapi.staticfiles import StaticFiles
 from backend.database import Base, engine
 from backend.routes import router
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import Request
+
 # Create database tables if they do not exist
 Base.metadata.create_all(bind=engine)
 
@@ -14,6 +17,18 @@ app = FastAPI(
     description="Multi-modal similarity matching system with NLP semantic embeddings, Computer Vision, and attribute proximity scoring.",
     version="1.0.0"
 )
+
+# Custom middleware to disable caching on dynamic /api/ endpoints
+class NoCacheApiMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+app.add_middleware(NoCacheApiMiddleware)
 
 # Enable CORS for frontend integration
 app.add_middleware(

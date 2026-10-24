@@ -15,7 +15,7 @@ class ItemReport(Base):
     location = Column(String(200), nullable=False)
     date_lost_or_found = Column(Date, nullable=False)
     description = Column(Text, nullable=False)
-    image_url = Column(String(500), nullable=True)
+    image_url = Column(Text, nullable=True)
     text_embedding = Column(JSON, nullable=True) # Dense vector representation
     image_embedding = Column(JSON, nullable=True) # Dense vector representation (optional)
     status = Column(String(20), default="OPEN", index=True) # "OPEN", "CLAIM_PENDING", "RESOLVED"
