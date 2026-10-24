@@ -43,7 +43,7 @@ export const DEMO_ACCOUNTS = {
 const getStoredAuthUser = () => {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
@@ -54,12 +54,21 @@ const saveStoredAuthUser = (user) => {
   if (typeof window === 'undefined') return;
   try {
     if (user) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
     } else {
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
-  } catch (e) {}
+  } catch (e) {
+  }
 };
+
+// Purge any persistent localStorage auth so new browser visits always start at the Login page
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (e) {}
+}
 
 
 const getStoredLocalItems = () => {
@@ -163,17 +172,8 @@ function CircularGauge({ score, size = 80, strokeWidth = 7 }) {
   );
 }
 
-// Campus Zones for Heatmap Explorer
-const CAMPUS_ZONES_DATA = [
-  { id: 'library', name: 'University Central Library', icon: '📚', desc: 'Floors 1-3, Silent Study & Reading Desks', color: 'indigo' },
-  { id: 'canteen', name: 'Student Canteen & Food Court', icon: '☕', desc: 'Juice counter, Main dining & Patio', color: 'amber' },
-  { id: 'block_b', name: 'Computer Science Labs (Block B)', icon: '💻', desc: 'Hardware labs, Terminals 1-50', color: 'cyan' },
-  { id: 'block_a', name: 'Academic Block A', icon: '🏛️', desc: 'Lecture halls 101-304 & Faculty offices', color: 'purple' },
-  { id: 'gym', name: 'Sports Complex & Gymnasium', icon: '🏋️', desc: 'Indoor courts, Lockers & Fitness room', color: 'emerald' },
-  { id: 'admin', name: 'Administrative Building', icon: '🏢', desc: 'Student affairs, Registrar & Security desk', color: 'blue' },
-];
-
 // Comprehensive Taxonomy Categories with Criteria for the Dedicated Categories Page
+
 const TAXONOMY_CATEGORIES = [
   {
     id: 'Electronics',
@@ -309,7 +309,6 @@ export default function App() {
   const [browseSearch, setBrowseSearch] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [radarThreshold, setRadarThreshold] = useState(60);
-  const [selectedZone, setSelectedZone] = useState('all');
 
   // Interactive Weight Simulation inside Modal
   const [customWeights, setCustomWeights] = useState({
@@ -904,7 +903,6 @@ export default function App() {
   const filteredItems = items.filter(item => {
     if (browseType !== 'ALL' && item.type !== browseType) return false;
     if (browseCategory !== 'ALL' && !item.category.toLowerCase().includes(browseCategory.toLowerCase())) return false;
-    if (selectedZone !== 'all' && !item.location.toLowerCase().includes(selectedZone.replace('_', ' ').toLowerCase())) return false;
     if (browseSearch) {
       const q = browseSearch.toLowerCase();
       const matchText = `${item.title} ${item.description} ${item.location} ${item.color} ${item.brand || ''}`.toLowerCase();
@@ -989,10 +987,17 @@ export default function App() {
       )}
 
       {/* Main App Navigation Bar - Google Themed */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/90 border-b border-slate-200/80 px-4 lg:px-8 py-3 transition-all shadow-sm">
+      <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/95 border-b border-slate-200/80 px-4 lg:px-8 py-3 transition-all shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           {/* Logo & Brand Identity */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('explore')}>
+          <div 
+            className="flex items-center gap-3 cursor-pointer" 
+            onClick={() => {
+              if (authUser) {
+                setActiveTab(authUser.role === 'admin' ? 'admin' : 'explore');
+              }
+            }}
+          >
             <div className="relative">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-sky-500 p-0.5 shadow-md shadow-blue-500/25 flex items-center justify-center">
                 <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center overflow-hidden relative">
@@ -1011,138 +1016,112 @@ export default function App() {
                   Findr<span className="text-gradient-hero">AI</span>
                 </span>
                 <span className="px-2 py-0.5 text-[9px] uppercase font-extrabold tracking-wider rounded-md bg-blue-50 text-blue-700 border border-blue-200">
-                  CAMPUS INTELLIGENCE
+                  {authUser ? (authUser.role === 'admin' ? 'CAMPUS SECURITY ADMIN' : 'STUDENT PORTAL') : 'CAMPUS INTELLIGENCE'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium">Multi-Modal Semantic Matching & Campus Recovery Platform</p>
             </div>
           </div>
 
-          {/* Navigation Controls: Dedicated Separate Pages */}
-          <div className="flex flex-wrap items-center gap-2">
-            <nav className="flex items-center p-1 rounded-2xl bg-slate-100/90 border border-slate-200 shadow-sm text-xs font-semibold overflow-x-auto max-w-full">
-              {/* Page 1: Explore Directory */}
-              <button
-                onClick={() => setActiveTab('explore')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all ${
-                  activeTab === 'explore' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
-                    : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
-                }`}
-              >
-                <Search className="w-4 h-4" />
-                <span>Explore</span>
-                {items.length > 0 && (
+          {/* Right Header Navigation & Actions */}
+          {authUser ? (
+            /* AUTHENTICATED NAVIGATION: Explore, Radar, Categories, Report, Admin Desk (if admin) */
+            <div className="flex flex-wrap items-center gap-2.5">
+              <nav className="flex items-center p-1 rounded-2xl bg-slate-100/90 border border-slate-200 shadow-sm text-xs font-semibold overflow-x-auto max-w-full">
+                {/* Admin Desk - STRICTLY ONLY FOR ADMINS */}
+                {authUser.role === 'admin' && (
+                  <button
+                    onClick={() => setActiveTab('admin')}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+                      activeTab === 'admin' 
+                        ? 'bg-amber-600 text-white shadow-md shadow-amber-500/25 font-bold' 
+                        : 'text-amber-800 hover:text-amber-900 hover:bg-amber-100/80 font-bold'
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4 text-amber-300" />
+                    <span>Admin Desk</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-amber-500 text-slate-900">
+                      OFFICER
+                    </span>
+                    {stats.pending_claims > 0 && (
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                    )}
+                  </button>
+                )}
+
+                {/* Option 1: Explore Directory */}
+                <button
+                  onClick={() => setActiveTab('explore')}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'explore' 
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
+                      : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
+                  }`}
+                >
+                  <Search className="w-4 h-4" />
+                  <span>Explore</span>
+                  {items.length > 0 && (
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      activeTab === 'explore' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {items.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Option 2: AI Match Radar */}
+                <button
+                  onClick={() => setActiveTab('radar')}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'radar' 
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
+                      : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
+                  }`}
+                >
+                  <Radar className="w-4 h-4" />
+                  <span>AI Matching</span>
+                  {filteredMatches.length > 0 && (
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      activeTab === 'radar' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {filteredMatches.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Option 3: Categories & Criteria */}
+                <button
+                  onClick={() => setActiveTab('categories')}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'categories' 
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
+                      : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Categories</span>
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    activeTab === 'explore' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                    activeTab === 'categories' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                   }`}>
-                    {items.length}
+                    {TAXONOMY_CATEGORIES.length}
                   </span>
-                )}
-              </button>
+                </button>
 
-              {/* Page 2: AI Match Radar */}
-              <button
-                onClick={() => setActiveTab('radar')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all ${
-                  activeTab === 'radar' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
-                    : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
-                }`}
-              >
-                <Radar className="w-4 h-4" />
-                <span>AI Matching</span>
-                {filteredMatches.length > 0 && (
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    activeTab === 'radar' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {filteredMatches.length}
-                  </span>
-                )}
-              </button>
+                {/* Option 4: Report Item */}
+                <button
+                  onClick={() => setActiveTab('report')}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'report' 
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
+                      : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
+                  }`}
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Report Item</span>
+                </button>
+              </nav>
 
-              {/* Page 3: Categories & Criteria (Dedicated Page) */}
-              <button
-                onClick={() => setActiveTab('categories')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all ${
-                  activeTab === 'categories' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
-                    : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
-                }`}
-              >
-                <Layers className="w-4 h-4" />
-                <span>Categories</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  activeTab === 'categories' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {TAXONOMY_CATEGORIES.length}
-                </span>
-              </button>
-
-              {/* Page 4: Report Item */}
-              <button
-                onClick={() => setActiveTab('report')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all ${
-                  activeTab === 'report' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
-                    : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
-                }`}
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Report Item</span>
-              </button>
-
-              {/* Page 5: Campus Map */}
-              <button
-                onClick={() => setActiveTab('heatmap')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all ${
-                  activeTab === 'heatmap' 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' 
-                    : 'text-slate-600 hover:text-blue-600 hover:bg-white/70'
-                }`}
-              >
-                <Compass className="w-4 h-4" />
-                <span>Campus Map</span>
-              </button>
-
-              {/* Page 6: Admin Desk */}
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all ${
-                  activeTab === 'admin' 
-                    ? (authUser?.role === 'admin' ? 'bg-amber-600 text-white shadow-md shadow-amber-500/25' : 'bg-blue-600 text-white shadow-md shadow-blue-500/25')
-                    : (authUser?.role === 'admin' ? 'text-amber-700 hover:text-amber-800 hover:bg-amber-50 font-bold' : 'text-slate-600 hover:text-blue-600 hover:bg-white/70')
-                }`}
-                title={authUser?.role === 'admin' ? 'Authorized Admin Desk' : 'Admin clearance required for approvals'}
-              >
-                <ShieldCheck className={`w-4 h-4 ${authUser?.role === 'admin' ? 'text-amber-400' : ''}`} />
-                <span>Admin Desk</span>
-                {authUser?.role === 'admin' && (
-                  <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-amber-500 text-slate-900">
-                    ADMIN
-                  </span>
-                )}
-                {stats.pending_claims > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                )}
-              </button>
-
-              {/* Page 7: Login Portal tab */}
-              <button
-                onClick={() => setActiveTab('login')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all ${
-                  activeTab === 'login' 
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25 font-bold' 
-                    : 'text-slate-600 hover:text-indigo-600 hover:bg-white/70'
-                }`}
-              >
-                {authUser ? <UserCheck className="w-4 h-4 text-emerald-500" /> : <Lock className="w-4 h-4 text-indigo-500" />}
-                <span>{authUser ? 'Account' : 'Login'}</span>
-              </button>
-            </nav>
-
-            {/* User Profile Pill / Quick Auth Switcher */}
-            {authUser ? (
+              {/* User Profile Pill & Sign Out Button */}
               <div className="flex items-center gap-2 p-1 pl-3 pr-2 rounded-2xl bg-white border border-slate-200 shadow-sm text-xs">
                 <div className="flex items-center gap-2">
                   <div className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs ${
@@ -1154,7 +1133,7 @@ export default function App() {
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-extrabold text-slate-800 text-[11px] truncate max-w-[110px]">
+                      <span className="font-extrabold text-slate-800 text-[11px] truncate max-w-[120px]">
                         {authUser.full_name || authUser.email}
                       </span>
                       <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
@@ -1170,50 +1149,429 @@ export default function App() {
 
                 <button
                   onClick={handleLogout}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                  title="Sign Out"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer flex items-center gap-1 text-[11px] font-semibold"
+                  title="Sign out and return to entrance login page"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Sign Out</span>
                 </button>
               </div>
-            ) : (
-              <div className="flex items-center gap-1.5">
+            </div>
+          ) : (
+            /* NON-AUTHENTICATED HEADER: Quick Demo Buttons & Lock indicator */
+            <div className="flex items-center gap-2.5">
+              <div className="hidden sm:flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    setAuthPortalRole('user');
-                    setActiveTab('login');
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('user')}
+                  className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold border border-blue-200 transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  <LogIn className="w-4 h-4" />
-                  <span>Sign In</span>
+                  <span>🎓</span>
+                  <span>Student Demo</span>
                 </button>
-                <div className="hidden xl:flex items-center gap-1">
-                  <button
-                    onClick={() => handleQuickDemoLogin('user')}
-                    className="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold border border-slate-200 transition"
-                    title="Quick Login as Demo Student"
-                  >
-                    Demo User
-                  </button>
-                  <button
-                    onClick={() => handleQuickDemoLogin('admin')}
-                    className="px-2 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200 transition"
-                    title="Quick Login as Demo Security Admin"
-                  >
-                    Demo Admin
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('admin')}
+                  className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold border border-amber-200 transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>🛡️</span>
+                  <span>Admin Demo</span>
+                </button>
               </div>
-            )}
-          </div>
+
+              <span className="px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-semibold flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Login Required</span>
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 lg:px-8 mt-6">
+        {!authUser ? (
+          /* ============================================================== */
+          /* ENTRANCE GATE: DEDICATED LOGIN PAGE AT THE VERY BEGINNING       */
+          /* (Options like Report, Explore, AI Matching locked until login) */
+          /* ============================================================== */
+          <div className="max-w-4xl mx-auto space-y-8 animate-fade-in py-4">
+            {/* Header Title */}
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-extrabold uppercase tracking-wider">
+                <Shield className="w-3.5 h-3.5 text-blue-600" />
+                <span>Multi-Role Access Control</span>
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 font-['Outfit'] tracking-tight">
+                Campus Portal Authentication
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto">
+                Sign in to your account. Select your portal below based on your role: Student / User or Campus Security Administrator.
+              </p>
+            </div>
 
-        {/* ============================================================== */}
+            {/* Dual Role Selector Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Option 1: Student / User Card */}
+              <div 
+                onClick={() => {
+                  setAuthPortalRole('user');
+                  setAuthError('');
+                }}
+                className={`glass-panel p-6 rounded-3xl cursor-pointer transition-all border-2 relative overflow-hidden ${
+                  authPortalRole === 'user'
+                    ? 'border-blue-500 bg-gradient-to-br from-blue-50/90 via-white to-sky-50/70 shadow-lg shadow-blue-500/10'
+                    : 'border-slate-200/90 bg-white hover:border-slate-300'
+                }`}
+              >
+                {authPortalRole === 'user' && (
+                  <div className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                    <Check className="w-3 h-3" /> Selected Mode
+                  </div>
+                )}
+
+                <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mb-3">
+                  <User className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-extrabold text-slate-900 font-['Outfit']">
+                  Student & Campus Member
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  For students, faculty, and university members. Report lost personal articles, browse discovered items, search the AI Match Radar, and file ownership verification claims.
+                </p>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Regular Member Access</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuickDemoLogin('user');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>1-Click Student Login</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 2: Security Admin Card */}
+              <div 
+                onClick={() => {
+                  setAuthPortalRole('admin');
+                  setAuthError('');
+                }}
+                className={`glass-panel p-6 rounded-3xl cursor-pointer transition-all border-2 relative overflow-hidden ${
+                  authPortalRole === 'admin'
+                    ? 'border-amber-500 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/70 shadow-lg shadow-amber-500/10'
+                    : 'border-slate-200/90 bg-white hover:border-slate-300'
+                }`}
+              >
+                {authPortalRole === 'admin' && (
+                  <div className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-bold">
+                    <Check className="w-3 h-3" /> Selected Mode
+                  </div>
+                )}
+
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-3">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-extrabold text-slate-900 font-['Outfit']">
+                  Campus Security & Staff Admin
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  For authorized Campus Security Officers & Staff administrators. <strong>Approve reported items</strong>, evaluate claimant proof, authorize article releases, confirm AI matches, and audit records.
+                </p>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[11px] text-amber-800 font-semibold">Elevated Approval Authority</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuickDemoLogin('admin');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>1-Click Admin Login</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Authentication Form Card */}
+            <div className="glass-panel p-6 sm:p-8 rounded-3xl bg-white border-slate-200 shadow-xl max-w-xl mx-auto">
+              {/* Form Mode Header Tabs (Sign In vs Register) */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-200 mb-6">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                      authPortalRole === 'admin'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : 'bg-blue-100 text-blue-800 border border-blue-200'
+                    }`}>
+                      {authPortalRole === 'admin' ? '🛡️ Admin Desk Portal' : '🎓 Student Portal'}
+                    </span>
+                    <span className="text-xs text-slate-400">•</span>
+                    <span className="text-xs text-slate-500 font-medium">
+                      {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-extrabold text-slate-900 font-['Outfit'] mt-1">
+                    {authMode === 'signin' 
+                      ? (authPortalRole === 'admin' ? 'Authenticate Security Admin' : 'Student & Member Sign In')
+                      : (authPortalRole === 'admin' ? 'Register Security Staff' : 'Create Student Account')
+                    }
+                  </h3>
+                </div>
+
+                <div className="flex p-1 rounded-xl bg-slate-100 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode('signin'); setAuthError(''); }}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                      authMode === 'signin' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode('register'); setAuthError(''); }}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                      authMode === 'register' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Register
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Alert */}
+              {authError && (
+                <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{authError}</span>
+                </div>
+              )}
+
+              {/* Form */}
+              <form onSubmit={authMode === 'signin' ? handleLogin : handleRegister} className="space-y-4">
+                {authMode === 'register' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name *</label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        required
+                        placeholder={authPortalRole === 'admin' ? 'e.g. Officer James Vance' : 'e.g. Alex Student'}
+                        value={authFormData.full_name}
+                        onChange={(e) => setAuthFormData({ ...authFormData, full_name: e.target.value })}
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Campus Email Address *</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type="email"
+                      required
+                      placeholder={authPortalRole === 'admin' ? 'admin@campus.edu' : 'student@campus.edu'}
+                      value={authFormData.email}
+                      onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-sm font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700">Password *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      placeholder="••••••••"
+                      value={authFormData.password}
+                      onChange={(e) => setAuthFormData({ ...authFormData, password: e.target.value })}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-sm font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Submit Action */}
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className={`w-full py-3 rounded-xl text-white font-bold text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ${
+                    authPortalRole === 'admin'
+                      ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 shadow-amber-600/25'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25'
+                  }`}
+                >
+                  {authLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Authenticating...</span>
+                    </>
+                  ) : (
+                    <>
+                      {authPortalRole === 'admin' ? <ShieldCheck className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
+                      <span>
+                        {authMode === 'signin'
+                          ? (authPortalRole === 'admin' ? 'Sign In as Security Administrator' : 'Sign In as Student / User')
+                          : (authPortalRole === 'admin' ? 'Create Administrator Account' : 'Create Student Account')
+                        }
+                      </span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Demo Fill Quick Buttons */}
+              <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
+                <p className="text-[11px] font-bold text-slate-600">Quick Test Credentials:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthPortalRole('user');
+                      setAuthFormData({ email: DEMO_ACCOUNTS.user.email, password: DEMO_ACCOUNTS.user.password, full_name: DEMO_ACCOUNTS.user.full_name });
+                    }}
+                    className="p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200 text-left transition flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">🎓</div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800">Fill Student Credentials</p>
+                      <p className="text-[10px] text-slate-500 font-mono truncate">{DEMO_ACCOUNTS.user.email}</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthPortalRole('admin');
+                      setAuthFormData({ email: DEMO_ACCOUNTS.admin.email, password: DEMO_ACCOUNTS.admin.password, full_name: DEMO_ACCOUNTS.admin.full_name });
+                    }}
+                    className="p-2.5 rounded-xl bg-amber-50/60 hover:bg-amber-100/70 border border-amber-200 text-left transition flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-xs font-bold">🛡️</div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-amber-900">Fill Admin Credentials</p>
+                      <p className="text-[10px] text-amber-700 font-mono truncate">{DEMO_ACCOUNTS.admin.email}</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Why Users and Admin are kept different - Roles Comparison Table */}
+            <div className="glass-panel p-6 border-slate-200 bg-white/95 rounded-3xl shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <ShieldCheck className="w-5 h-5 text-blue-600" />
+                <h3 className="font-extrabold text-base text-slate-900 font-['Outfit']">
+                  Role Capabilities & Approval Privileges Matrix
+                </h3>
+              </div>
+              <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+                Campus item safety protocol requires clear separation between community reporting and administrative approvals:
+              </p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                      <th className="p-3">Platform Capability</th>
+                      <th className="p-3">🎓 Student / Member</th>
+                      <th className="p-3">🛡️ Campus Security Admin</th>
+                      <th className="p-3">Governance Rule</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="p-3 font-semibold text-slate-900">Browse Campus Directory</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Full Access</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Full Access</td>
+                      <td className="p-3 text-slate-500">Public transparency for quick recovery</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="p-3 font-semibold text-slate-900">Report Lost or Found Articles</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
+                      <td className="p-3 text-slate-500">Indexed into multi-modal semantic matrix</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="p-3 font-semibold text-slate-900">AI Match Radar & Similarity</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
+                      <td className="p-3 text-slate-500">Calculates NLP & Computer Vision scores</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="p-3 font-semibold text-slate-900">Submit Item Ownership Claim</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed (Files Proof)</td>
+                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
+                      <td className="p-3 text-slate-500">Claimant provides serial, PIN, marks</td>
+                    </tr>
+                    <tr className="hover:bg-amber-50/30 bg-amber-50/10">
+                      <td className="p-3 font-extrabold text-slate-900 flex items-center gap-1.5">
+                        <BadgeCheck className="w-4 h-4 text-amber-600" />
+                        Approve Reported Articles & Mark Verified
+                      </td>
+                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
+                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
+                      <td className="p-3 text-slate-700 font-medium">Prevents fraudulent or spam reports</td>
+                    </tr>
+                    <tr className="hover:bg-amber-50/30 bg-amber-50/10">
+                      <td className="p-3 font-extrabold text-slate-900 flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-amber-600" />
+                        Authorize Ownership Claims & Release Items
+                      </td>
+                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
+                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
+                      <td className="p-3 text-slate-700 font-medium">Security verifies physical proof & hands over</td>
+                    </tr>
+                    <tr className="hover:bg-amber-50/30 bg-amber-50/10">
+                      <td className="p-3 font-extrabold text-slate-900 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                        Confirm / Reject AI Matches
+                      </td>
+                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
+                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
+                      <td className="p-3 text-slate-700 font-medium">Official determination of item pairs</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="p-3 font-semibold text-slate-900">Database Purge & Vector Recalibration</td>
+                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
+                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
+                      <td className="p-3 text-slate-500">Maintenance & institutional controls</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ============================================================== */
+          /* AUTHENTICATED WORKSPACE: FULL ACCESS TO UNLOCKED OPTIONS       */
+          /* ============================================================== */
+          <>
+            {/* ============================================================== */}
         {/* PAGE 1: EXPLORE DIRECTORY (Campus Items Explorer)             */}
         {/* ============================================================== */}
         {activeTab === 'explore' && (
@@ -1387,7 +1745,7 @@ export default function App() {
                 </p>
                 <div className="mt-4 flex items-center justify-center gap-3">
                   <button
-                    onClick={() => { setBrowseSearch(''); setBrowseCategory('ALL'); setBrowseType('ALL'); setSelectedZone('all'); }}
+                    onClick={() => { setBrowseSearch(''); setBrowseCategory('ALL'); setBrowseType('ALL'); }}
                     className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
                   >
                     Reset Filters
@@ -2465,96 +2823,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* PAGE 5: CAMPUS ZONE HEATMAP (Spatial Campus Density)           */}
-        {/* ============================================================== */}
-        {activeTab === 'heatmap' && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="glass-panel p-6 border-blue-200/90 bg-white">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 text-blue-700 text-xs font-bold uppercase tracking-wider mb-1">
-                    <Compass className="w-4 h-4 text-blue-600" />
-                    <span>Campus Spatial Intelligence</span>
-                  </div>
-                  <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 font-['Outfit']">
-                    Campus Zone Heatmap & Incident Density
-                  </h1>
-                  <p className="text-xs text-slate-600 mt-1">
-                    Visual incident distribution across campus zones to identify recovery hotspots.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-600">Filter Zone:</span>
-                  <select
-                    value={selectedZone}
-                    onChange={(e) => setSelectedZone(e.target.value)}
-                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
-                  >
-                    <option value="all">All Campus Zones</option>
-                    <option value="library">Main Library</option>
-                    <option value="canteen">Canteen & Cafeteria</option>
-                    <option value="block_b">Block B Labs</option>
-                    <option value="block_a">Block A Classrooms</option>
-                    <option value="gym">Gym / Sports Complex</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Campus Zone Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {CAMPUS_ZONES_DATA.map((zone) => {
-                const zoneMatches = items.filter(i => i.location.toLowerCase().includes(zone.id.replace('_', ' ')));
-                const lostCount = zoneMatches.filter(i => i.type === 'LOST').length;
-                const foundCount = zoneMatches.filter(i => i.type === 'FOUND').length;
-
-                return (
-                  <div 
-                    key={zone.id}
-                    onClick={() => {
-                      setSelectedZone(zone.id);
-                      setBrowseSearch(zone.id.replace('_', ' '));
-                      setActiveTab('explore');
-                    }}
-                    className="glass-card p-5 cursor-pointer hover:border-blue-400 transition-all group bg-white"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-2xl group-hover:scale-110 transition shadow-sm">
-                        {zone.icon}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                          {lostCount} Lost
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                          {foundCount} Found
-                        </span>
-                      </div>
-                    </div>
-
-                    <h3 className="font-extrabold text-slate-900 text-base mt-4 font-['Outfit'] group-hover:text-blue-700 transition">
-                      {zone.name}
-                    </h3>
-                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                      {zone.desc}
-                    </p>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-blue-600 font-bold">
-                      <span>Explore Zone Incidents</span>
-                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ============================================================== */}
-        {/* PAGE 6: ADMIN DESK (Claims Verification & Item Approvals)     */}
+        /* ============================================================== */
+        {/* PAGE 5: ADMIN DESK (Claims Verification & Item Approvals)     */}
         {/* ============================================================== */}
         {activeTab === 'admin' && (
           (!authUser || authUser.role !== 'admin') ? (
@@ -2951,436 +3221,8 @@ export default function App() {
             </div>
           )
         )}
-
-        {/* ============================================================== */}
-        {/* PAGE 7: LOGIN & REGISTRATION IDENTITY PORTAL                  */}
-        {/* ============================================================== */}
-        {activeTab === 'login' && (
-          <div className="max-w-4xl mx-auto space-y-8 animate-fade-in py-4">
-            {/* Header Title */}
-            <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-extrabold uppercase tracking-wider">
-                <Shield className="w-3.5 h-3.5 text-blue-600" />
-                <span>Multi-Role Access Control</span>
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 font-['Outfit'] tracking-tight">
-                Campus Portal Authentication
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto">
-                Sign in to your account. Select your portal below based on your role: Student / User or Campus Security Administrator.
-              </p>
-            </div>
-
-            {/* If Already Logged In */}
-            {authUser && (
-              <div className="glass-panel p-6 border-slate-200 bg-white/95 shadow-md text-center space-y-4 rounded-3xl">
-                <div className="flex items-center justify-center gap-3">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold ${
-                    authUser.role === 'admin' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-blue-100 text-blue-800 border border-blue-200'
-                  }`}>
-                    {authUser.role === 'admin' ? '🛡️' : '🎓'}
-                  </div>
-                  <div className="text-left">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-extrabold text-slate-900">{authUser.full_name || authUser.email}</h3>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                        authUser.role === 'admin' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-900 border border-blue-200'
-                      }`}>
-                        {authUser.role === 'admin' ? 'Security Admin' : 'Student / User'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 font-mono">{authUser.email}</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                  {authUser.role === 'admin' ? (
-                    <button
-                      onClick={() => setActiveTab('admin')}
-                      className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition flex items-center gap-2 cursor-pointer"
-                    >
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>Open Admin Approvals Desk</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setActiveTab('explore')}
-                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition flex items-center gap-2 cursor-pointer"
-                    >
-                      <Search className="w-4 h-4" />
-                      <span>Browse Campus Directory</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Dual Role Selector Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Option 1: Student / User Card */}
-              <div 
-                onClick={() => {
-                  setAuthPortalRole('user');
-                  setAuthError('');
-                }}
-                className={`glass-panel p-6 rounded-3xl cursor-pointer transition-all border-2 relative overflow-hidden ${
-                  authPortalRole === 'user'
-                    ? 'border-blue-500 bg-gradient-to-br from-blue-50/90 via-white to-sky-50/70 shadow-lg shadow-blue-500/10'
-                    : 'border-slate-200/90 bg-white hover:border-slate-300'
-                }`}
-              >
-                {authPortalRole === 'user' && (
-                  <div className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
-                    <Check className="w-3 h-3" /> Selected Mode
-                  </div>
-                )}
-
-                <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mb-3">
-                  <User className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-extrabold text-slate-900 font-['Outfit']">
-                  Student & Campus Member
-                </h3>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  For students, faculty, and university members. Report lost personal articles, browse discovered items, search the AI Match Radar, and file ownership verification claims.
-                </p>
-
-                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-500">Regular Member Access</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleQuickDemoLogin('user');
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>1-Click Student Login</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Option 2: Security Admin Card */}
-              <div 
-                onClick={() => {
-                  setAuthPortalRole('admin');
-                  setAuthError('');
-                }}
-                className={`glass-panel p-6 rounded-3xl cursor-pointer transition-all border-2 relative overflow-hidden ${
-                  authPortalRole === 'admin'
-                    ? 'border-amber-500 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/70 shadow-lg shadow-amber-500/10'
-                    : 'border-slate-200/90 bg-white hover:border-slate-300'
-                }`}
-              >
-                {authPortalRole === 'admin' && (
-                  <div className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-bold">
-                    <Check className="w-3 h-3" /> Selected Mode
-                  </div>
-                )}
-
-                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-3">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-extrabold text-slate-900 font-['Outfit']">
-                  Campus Security & Staff Admin
-                </h3>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  For authorized Campus Security Officers & Staff administrators. <strong>Approve reported items</strong>, evaluate claimant proof, authorize article releases, confirm AI matches, and audit records.
-                </p>
-
-                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-amber-800 font-semibold">Elevated Approval Authority</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleQuickDemoLogin('admin');
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>1-Click Admin Login</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Active Authentication Form Card */}
-            <div className="glass-panel p-6 sm:p-8 rounded-3xl bg-white border-slate-200 shadow-xl max-w-xl mx-auto">
-              {/* Form Mode Header Tabs (Sign In vs Register) */}
-              <div className="flex items-center justify-between pb-4 border-b border-slate-200 mb-6">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                      authPortalRole === 'admin'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                        : 'bg-blue-100 text-blue-800 border border-blue-200'
-                    }`}>
-                      {authPortalRole === 'admin' ? '🛡️ Admin Desk Portal' : '🎓 Student Portal'}
-                    </span>
-                    <span className="text-xs text-slate-400">•</span>
-                    <span className="text-xs text-slate-500 font-medium">
-                      {authMode === 'signin' ? 'Sign In' : 'Create Account'}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-extrabold text-slate-900 font-['Outfit'] mt-1">
-                    {authMode === 'signin' 
-                      ? (authPortalRole === 'admin' ? 'Authenticate Security Admin' : 'Student & Member Sign In')
-                      : (authPortalRole === 'admin' ? 'Register Security Staff' : 'Create Student Account')
-                    }
-                  </h3>
-                </div>
-
-                <div className="flex p-1 rounded-xl bg-slate-100 text-xs font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode('signin'); setAuthError(''); }}
-                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                      authMode === 'signin' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    Sign In
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode('register'); setAuthError(''); }}
-                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                      authMode === 'register' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    Register
-                  </button>
-                </div>
-              </div>
-
-              {/* Error Alert */}
-              {authError && (
-                <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{authError}</span>
-                </div>
-              )}
-
-              {/* Form */}
-              <form onSubmit={authMode === 'signin' ? handleLogin : handleRegister} className="space-y-4">
-                {authMode === 'register' && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name *</label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                      <input
-                        type="text"
-                        required
-                        placeholder={authPortalRole === 'admin' ? 'e.g. Officer James Vance' : 'e.g. Alex Student'}
-                        value={authFormData.full_name}
-                        onChange={(e) => setAuthFormData({ ...authFormData, full_name: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-sm"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Campus Email Address *</label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      type="email"
-                      required
-                      placeholder={authPortalRole === 'admin' ? 'admin@campus.edu' : 'student@campus.edu'}
-                      value={authFormData.email}
-                      onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-sm font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-700">Password *</label>
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
-                    >
-                      {showPassword ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      placeholder="••••••••"
-                      value={authFormData.password}
-                      onChange={(e) => setAuthFormData({ ...authFormData, password: e.target.value })}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-sm font-mono"
-                    />
-                  </div>
-                </div>
-
-                {/* Submit Action */}
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className={`w-full py-3 rounded-xl text-white font-bold text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ${
-                    authPortalRole === 'admin'
-                      ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 shadow-amber-600/25'
-                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25'
-                  }`}
-                >
-                  {authLoading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Authenticating...</span>
-                    </>
-                  ) : (
-                    <>
-                      {authPortalRole === 'admin' ? <ShieldCheck className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-                      <span>
-                        {authMode === 'signin'
-                          ? (authPortalRole === 'admin' ? 'Sign In as Security Administrator' : 'Sign In as Student / User')
-                          : (authPortalRole === 'admin' ? 'Create Administrator Account' : 'Create Student Account')
-                        }
-                      </span>
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Demo Fill Quick Buttons */}
-              <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
-                <p className="text-[11px] font-bold text-slate-600">Quick Test Credentials:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthPortalRole('user');
-                      setAuthFormData({ email: DEMO_ACCOUNTS.user.email, password: DEMO_ACCOUNTS.user.password, full_name: DEMO_ACCOUNTS.user.full_name });
-                    }}
-                    className="p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200 text-left transition flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">🎓</div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800">Fill Student Credentials</p>
-                      <p className="text-[10px] text-slate-500 font-mono truncate">{DEMO_ACCOUNTS.user.email}</p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthPortalRole('admin');
-                      setAuthFormData({ email: DEMO_ACCOUNTS.admin.email, password: DEMO_ACCOUNTS.admin.password, full_name: DEMO_ACCOUNTS.admin.full_name });
-                    }}
-                    className="p-2.5 rounded-xl bg-amber-50/60 hover:bg-amber-100/70 border border-amber-200 text-left transition flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-xs font-bold">🛡️</div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-amber-900">Fill Admin Credentials</p>
-                      <p className="text-[10px] text-amber-700 font-mono truncate">{DEMO_ACCOUNTS.admin.email}</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Why Users and Admin are kept different - Roles Comparison Table */}
-            <div className="glass-panel p-6 border-slate-200 bg-white/95 rounded-3xl shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <ShieldCheck className="w-5 h-5 text-blue-600" />
-                <h3 className="font-extrabold text-base text-slate-900 font-['Outfit']">
-                  Role Capabilities & Approval Privileges Matrix
-                </h3>
-              </div>
-              <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-                Campus item safety protocol requires clear separation between community reporting and administrative approvals:
-              </p>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
-                      <th className="p-3">Platform Capability</th>
-                      <th className="p-3">🎓 Student / Member</th>
-                      <th className="p-3">🛡️ Campus Security Admin</th>
-                      <th className="p-3">Governance Rule</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    <tr className="hover:bg-slate-50/50">
-                      <td className="p-3 font-semibold text-slate-900">Browse Campus Directory</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Full Access</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Full Access</td>
-                      <td className="p-3 text-slate-500">Public transparency for quick recovery</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50/50">
-                      <td className="p-3 font-semibold text-slate-900">Report Lost or Found Articles</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
-                      <td className="p-3 text-slate-500">Indexed into multi-modal semantic matrix</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50/50">
-                      <td className="p-3 font-semibold text-slate-900">AI Match Radar & Similarity</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
-                      <td className="p-3 text-slate-500">Calculates NLP & Computer Vision scores</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50/50">
-                      <td className="p-3 font-semibold text-slate-900">Submit Item Ownership Claim</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed (Files Proof)</td>
-                      <td className="p-3 text-emerald-700 font-bold">✓ Allowed</td>
-                      <td className="p-3 text-slate-500">Claimant provides serial, PIN, marks</td>
-                    </tr>
-                    <tr className="hover:bg-amber-50/30 bg-amber-50/10">
-                      <td className="p-3 font-extrabold text-slate-900 flex items-center gap-1.5">
-                        <BadgeCheck className="w-4 h-4 text-amber-600" />
-                        Approve Reported Articles & Mark Verified
-                      </td>
-                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
-                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
-                      <td className="p-3 text-slate-700 font-medium">Prevents fraudulent or spam reports</td>
-                    </tr>
-                    <tr className="hover:bg-amber-50/30 bg-amber-50/10">
-                      <td className="p-3 font-extrabold text-slate-900 flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-amber-600" />
-                        Authorize Ownership Claims & Release Items
-                      </td>
-                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
-                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
-                      <td className="p-3 text-slate-700 font-medium">Security verifies physical proof & hands over</td>
-                    </tr>
-                    <tr className="hover:bg-amber-50/30 bg-amber-50/10">
-                      <td className="p-3 font-extrabold text-slate-900 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-amber-600" />
-                        Confirm / Reject AI Matches
-                      </td>
-                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
-                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
-                      <td className="p-3 text-slate-700 font-medium">Official determination of item pairs</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50/50">
-                      <td className="p-3 font-semibold text-slate-900">Database Purge & Vector Recalibration</td>
-                      <td className="p-3 text-rose-600 font-bold">❌ Restricted</td>
-                      <td className="p-3 text-emerald-700 font-bold bg-emerald-50/50">✓ Full Authority</td>
-                      <td className="p-3 text-slate-500">Maintenance & institutional controls</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          </>
         )}
-
       </main>
 
       {/* ============================================================== */}
